@@ -1,16 +1,17 @@
 "use client"
 
 import type React from "react"
-
 import { useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Separator } from "@/components/ui/separator"
-import { CarIcon, FileTextIcon, UserIcon, ShieldIcon } from "lucide-react"
+import { CarIcon, FileTextIcon, UserIcon, ShieldIcon, DownloadIcon } from "lucide-react"
 
 interface FormData {
+  insurance_type: string
   sum_insured: number
   basic_premium_rate: number
   excess_protector: number
@@ -30,10 +31,12 @@ interface FormData {
   color: string
   period_of_insurance: string
   terms_of_payment: string
+  generated_by?: string
 }
 
 export default function DebitNotePage() {
   const [formData, setFormData] = useState<FormData>({
+    insurance_type: "",
     sum_insured: 0,
     basic_premium_rate: 3.5,
     excess_protector: 0,
@@ -53,7 +56,10 @@ export default function DebitNotePage() {
     color: "",
     period_of_insurance: "",
     terms_of_payment: "",
+    generated_by: "",
   })
+
+  const [isGenerating, setIsGenerating] = useState(false)
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target
@@ -65,46 +71,152 @@ export default function DebitNotePage() {
     }))
   }
 
+  const handleSelectChange = (name: string, value: string) => {
+    setFormData((prev) => ({
+      ...prev,
+      [name]: value,
+    }))
+  }
+
   const handleGeneratePDF = async () => {
-    const dateIssued = new Date().toLocaleDateString("en-GB")
+    setIsGenerating(true)
 
     try {
+      // Create payload matching backend model
+      const payload = {
+        insurance_type: formData.insurance_type,
+        sum_insured: formData.sum_insured,
+        basic_premium_rate: formData.basic_premium_rate,
+        excess_protector: formData.excess_protector,
+        radio_cassette: formData.radio_cassette,
+        windscreen_cover: formData.windscreen_cover,
+        tl: formData.tl,
+        sd: formData.sd,
+        class_of_insurance: formData.class_of_insurance,
+        policy_number: formData.policy_number,
+        name_of_insured: formData.name_of_insured,
+        occupation: formData.occupation,
+        pin_number: formData.pin_number,
+        vehicle_covered: formData.vehicle_covered,
+        engine_no: formData.engine_no,
+        chasis: formData.chasis,
+        sitting_capacity: formData.sitting_capacity,
+        color: formData.color,
+        period_of_insurance: formData.period_of_insurance,
+        terms_of_payment: formData.terms_of_payment,
+        ...(formData.generated_by && { generated_by: formData.generated_by }),
+      }
+
       const response = await fetch("https://utilitycoverapi.vercel.app/generate-debit-note", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          ...formData,
-          date_issued: dateIssued,
-        }),
+        body: JSON.stringify(payload),
       })
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`)
+      }
 
       const blob = await response.blob()
       const url = window.URL.createObjectURL(blob)
       const link = document.createElement("a")
       link.href = url
-      link.download = `DebitNote_${formData.vehicle_covered}_${dateIssued.replace(/\//g, "-")}.pdf`
+
+      // Generate filename based on vehicle and current date
+      const dateStr = new Date().toLocaleDateString("en-GB").replace(/\//g, "-")
+      const vehicleStr = formData.vehicle_covered.replace(/\s+/g, "")
+      link.download = `DebitNote_${vehicleStr}_${dateStr}.pdf`
+
       document.body.appendChild(link)
       link.click()
       link.remove()
+      window.URL.revokeObjectURL(url)
     } catch (error) {
       console.error("Error generating PDF:", error)
-      alert("Failed to generate PDF. Please try again.")
+      alert("Failed to generate PDF. Please check your connection and try again.")
+    } finally {
+      setIsGenerating(false)
     }
   }
 
+  // Calculate premium preview
+  const calculatePremium = () => {
+    const sumInsured = formData.sum_insured || 0
+    const basicPremiumRate = formData.basic_premium_rate || 0
+    const excessProtector = formData.excess_protector || 0
+    const tl = formData.tl || 0
+    const sd = formData.sd || 0
+
+    const calculatedBasicPremium = basicPremiumRate === 0 ? sumInsured : (sumInsured * basicPremiumRate) / 100
+    const totalPremium = calculatedBasicPremium + excessProtector + tl + sd
+
+    return {
+      basicPremium: calculatedBasicPremium,
+      totalPremium: totalPremium,
+    }
+  }
+
+  const { basicPremium, totalPremium } = calculatePremium()
+
   return (
-    <div className="container mx-auto py-8 px-4">
-      <div className="flex items-center justify-between mb-6">
+    <div className="container mx-auto py-8 px-4 max-w-6xl">
+      <div className="flex items-center justify-between mb-8">
         <div>
-          <h1 className="text-3xl font-bold">Debit Note Generator</h1>
-          <p className="text-muted-foreground mt-1">Fill in the details to generate a vehicle insurance debit note</p>
+          <h1 className="text-3xl font-bold text-gray-900">Motor Insurance Debit Note Generator</h1>
+          <p className="text-muted-foreground mt-2">
+            Generate professional motor insurance debit notes for Utility Cover Insurance Agencies
+          </p>
         </div>
         <div className="hidden md:block">
-          <img src="/insurance-shield-logo.png" alt="Insurance Logo" className="h-20 w-20" />
+          <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center">
+            <ShieldIcon className="h-8 w-8 text-blue-600" />
+          </div>
         </div>
       </div>
 
       <div className="grid gap-6">
+        {/* Insurance Type Section */}
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="flex items-center gap-2 text-xl">
+              <ShieldIcon className="h-5 w-5" />
+              Insurance Type
+            </CardTitle>
+            <CardDescription>Select the type of motor insurance coverage</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="grid gap-4 md:grid-cols-2">
+              <div className="grid gap-2">
+                <Label htmlFor="insurance_type">Insurance Type *</Label>
+                <Select
+                  value={formData.insurance_type}
+                  onValueChange={(value) => handleSelectChange("insurance_type", value)}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select insurance type" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="comprehensive">Comprehensive</SelectItem>
+                    <SelectItem value="third_party">Third Party</SelectItem>
+                    <SelectItem value="third_party_fire_theft">Third Party Fire & Theft</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="generated_by">Generated By (Optional)</Label>
+                <Input
+                  id="generated_by"
+                  name="generated_by"
+                  type="text"
+                  value={formData.generated_by}
+                  onChange={handleChange}
+                  placeholder="Agent or staff name"
+                />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
         {/* Policy Details Section */}
         <Card>
           <CardHeader className="pb-3">
@@ -117,50 +229,50 @@ export default function DebitNotePage() {
           <CardContent>
             <div className="grid gap-4 md:grid-cols-2">
               <div className="grid gap-2">
-                <Label htmlFor="policy_number">Policy Number</Label>
+                <Label htmlFor="policy_number">Policy Number *</Label>
                 <Input
                   id="policy_number"
                   name="policy_number"
                   type="text"
                   value={formData.policy_number}
                   onChange={handleChange}
-                  placeholder="e.g. POL/123/2023"
+                  placeholder="e.g. POL/123/2024"
                   required
                 />
               </div>
               <div className="grid gap-2">
-                <Label htmlFor="class_of_insurance">Class of Insurance</Label>
+                <Label htmlFor="class_of_insurance">Class of Insurance *</Label>
                 <Input
                   id="class_of_insurance"
                   name="class_of_insurance"
                   type="text"
                   value={formData.class_of_insurance}
                   onChange={handleChange}
-                  placeholder="e.g. Comprehensive"
+                  placeholder="e.g. Motor Private"
                   required
                 />
               </div>
               <div className="grid gap-2">
-                <Label htmlFor="period_of_insurance">Period of Insurance</Label>
+                <Label htmlFor="period_of_insurance">Period of Insurance *</Label>
                 <Input
                   id="period_of_insurance"
                   name="period_of_insurance"
                   type="text"
                   value={formData.period_of_insurance}
                   onChange={handleChange}
-                  placeholder="e.g. 01/01/2023 to 31/12/2023"
+                  placeholder="e.g. 01/01/2024 to 31/12/2024"
                   required
                 />
               </div>
               <div className="grid gap-2">
-                <Label htmlFor="terms_of_payment">Terms of Payment</Label>
+                <Label htmlFor="terms_of_payment">Terms of Payment *</Label>
                 <Input
                   id="terms_of_payment"
                   name="terms_of_payment"
                   type="text"
                   value={formData.terms_of_payment}
                   onChange={handleChange}
-                  placeholder="e.g. Annual/Quarterly/Monthly"
+                  placeholder="e.g. Annual, Quarterly, Monthly, Cash"
                   required
                 />
               </div>
@@ -180,7 +292,7 @@ export default function DebitNotePage() {
           <CardContent>
             <div className="grid gap-4 md:grid-cols-3">
               <div className="grid gap-2">
-                <Label htmlFor="name_of_insured">Name of Insured</Label>
+                <Label htmlFor="name_of_insured">Name of Insured *</Label>
                 <Input
                   id="name_of_insured"
                   name="name_of_insured"
@@ -192,7 +304,7 @@ export default function DebitNotePage() {
                 />
               </div>
               <div className="grid gap-2">
-                <Label htmlFor="occupation">Occupation/Business</Label>
+                <Label htmlFor="occupation">Occupation/Business *</Label>
                 <Input
                   id="occupation"
                   name="occupation"
@@ -204,7 +316,7 @@ export default function DebitNotePage() {
                 />
               </div>
               <div className="grid gap-2">
-                <Label htmlFor="pin_number">PIN Number</Label>
+                <Label htmlFor="pin_number">PIN Number *</Label>
                 <Input
                   id="pin_number"
                   name="pin_number"
@@ -231,7 +343,7 @@ export default function DebitNotePage() {
           <CardContent>
             <div className="grid gap-4 md:grid-cols-3">
               <div className="grid gap-2">
-                <Label htmlFor="vehicle_covered">Vehicle Registration</Label>
+                <Label htmlFor="vehicle_covered">Vehicle Registration *</Label>
                 <Input
                   id="vehicle_covered"
                   name="vehicle_covered"
@@ -243,7 +355,7 @@ export default function DebitNotePage() {
                 />
               </div>
               <div className="grid gap-2">
-                <Label htmlFor="engine_no">Engine Number</Label>
+                <Label htmlFor="engine_no">Engine Number *</Label>
                 <Input
                   id="engine_no"
                   name="engine_no"
@@ -255,7 +367,7 @@ export default function DebitNotePage() {
                 />
               </div>
               <div className="grid gap-2">
-                <Label htmlFor="chasis">Chassis Number</Label>
+                <Label htmlFor="chasis">Chassis Number *</Label>
                 <Input
                   id="chasis"
                   name="chasis"
@@ -267,7 +379,7 @@ export default function DebitNotePage() {
                 />
               </div>
               <div className="grid gap-2">
-                <Label htmlFor="sitting_capacity">Sitting Capacity</Label>
+                <Label htmlFor="sitting_capacity">Sitting Capacity *</Label>
                 <Input
                   id="sitting_capacity"
                   name="sitting_capacity"
@@ -279,7 +391,7 @@ export default function DebitNotePage() {
                 />
               </div>
               <div className="grid gap-2">
-                <Label htmlFor="color">Color</Label>
+                <Label htmlFor="color">Color *</Label>
                 <Input
                   id="color"
                   name="color"
@@ -294,87 +406,143 @@ export default function DebitNotePage() {
           </CardContent>
         </Card>
 
-        {/* Coverage Details Section */}
+        {/* Coverage & Premium Details Section */}
         <Card>
           <CardHeader className="pb-3">
             <CardTitle className="flex items-center gap-2 text-xl">
               <ShieldIcon className="h-5 w-5" />
-              Coverage Details
+              Coverage & Premium Details
             </CardTitle>
-            <CardDescription>Enter the insurance coverage information</CardDescription>
+            <CardDescription>Enter the insurance coverage and premium calculation information</CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="grid gap-4 md:grid-cols-3">
-              <div className="grid gap-2">
-                <Label htmlFor="sum_insured">Sum Insured (KES)</Label>
-                <Input
-                  id="sum_insured"
-                  name="sum_insured"
-                  type="number"
-                  value={formData.sum_insured}
-                  onChange={handleChange}
-                  placeholder="e.g. 1,500,000"
-                  required
-                />
+            <div className="grid gap-6">
+              <div className="grid gap-4 md:grid-cols-3">
+                <div className="grid gap-2">
+                  <Label htmlFor="sum_insured">Sum Insured (KES) *</Label>
+                  <Input
+                    id="sum_insured"
+                    name="sum_insured"
+                    type="number"
+                    value={formData.sum_insured}
+                    onChange={handleChange}
+                    placeholder="e.g. 1500000"
+                    required
+                  />
+                </div>
+                <div className="grid gap-2">
+                  <Label htmlFor="basic_premium_rate">Basic Premium Rate (%) *</Label>
+                  <Input
+                    id="basic_premium_rate"
+                    name="basic_premium_rate"
+                    type="number"
+                    value={formData.basic_premium_rate}
+                    onChange={handleChange}
+                    step="0.01"
+                    placeholder="e.g. 3.5"
+                    required
+                  />
+                </div>
+                <div className="grid gap-2">
+                  <Label htmlFor="excess_protector">Excess Protector (KES)</Label>
+                  <Input
+                    id="excess_protector"
+                    name="excess_protector"
+                    type="number"
+                    value={formData.excess_protector}
+                    onChange={handleChange}
+                    placeholder="e.g. 5000"
+                  />
+                </div>
               </div>
-              <div className="grid gap-2">
-                <Label htmlFor="basic_premium_rate">Basic Premium Rate (%)</Label>
-                <Input
-                  id="basic_premium_rate"
-                  name="basic_premium_rate"
-                  type="number"
-                  value={formData.basic_premium_rate}
-                  onChange={handleChange}
-                  step="0.01"
-                  required
-                />
+
+              <div className="grid gap-4 md:grid-cols-2">
+                <div className="grid gap-2">
+                  <Label htmlFor="radio_cassette">Radio Cassette *</Label>
+                  <Select
+                    value={formData.radio_cassette}
+                    onValueChange={(value) => handleSelectChange("radio_cassette", value)}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select radio cassette option" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="yes">Yes</SelectItem>
+                      <SelectItem value="no">No</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="grid gap-2">
+                  <Label htmlFor="windscreen_cover">Windscreen Cover *</Label>
+                  <Select
+                    value={formData.windscreen_cover}
+                    onValueChange={(value) => handleSelectChange("windscreen_cover", value)}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select windscreen cover option" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="yes">Yes</SelectItem>
+                      <SelectItem value="no">No</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
               </div>
-              <div className="grid gap-2">
-                <Label htmlFor="excess_protector">Excess Protector (KES)</Label>
-                <Input
-                  id="excess_protector"
-                  name="excess_protector"
-                  type="number"
-                  value={formData.excess_protector}
-                  onChange={handleChange}
-                  placeholder="e.g. 5,000"
-                  required
-                />
-              </div>
-              <div className="grid gap-2">
-                <Label htmlFor="radio_cassette">Radio Cassette</Label>
-                <Input
-                  id="radio_cassette"
-                  name="radio_cassette"
-                  type="text"
-                  value={formData.radio_cassette}
-                  onChange={handleChange}
-                  placeholder="e.g. Yes/No or Value"
-                  required
-                />
-              </div>
-              <div className="grid gap-2">
-                <Label htmlFor="windscreen_cover">Windscreen Cover</Label>
-                <Input
-                  id="windscreen_cover"
-                  name="windscreen_cover"
-                  type="text"
-                  value={formData.windscreen_cover}
-                  onChange={handleChange}
-                  placeholder="e.g. Yes/No or Value"
-                  required
-                />
-              </div>
-              <div className="grid grid-cols-2 gap-4">
+
+              <div className="grid gap-4 md:grid-cols-2">
                 <div className="grid gap-2">
                   <Label htmlFor="tl">TL (KES)</Label>
-                  <Input id="tl" name="tl" type="number" value={formData.tl} onChange={handleChange} required />
+                  <Input
+                    id="tl"
+                    name="tl"
+                    type="number"
+                    value={formData.tl}
+                    onChange={handleChange}
+                    placeholder="Training Levy amount"
+                  />
                 </div>
                 <div className="grid gap-2">
                   <Label htmlFor="sd">SD (KES)</Label>
-                  <Input id="sd" name="sd" type="number" value={formData.sd} onChange={handleChange} required />
+                  <Input
+                    id="sd"
+                    name="sd"
+                    type="number"
+                    value={formData.sd}
+                    onChange={handleChange}
+                    placeholder="Stamp Duty amount"
+                  />
                 </div>
               </div>
+
+              {/* Premium Preview */}
+              {formData.sum_insured > 0 && (
+                <div className="bg-gray-50 p-4 rounded-lg">
+                  <h4 className="font-semibold mb-2">Premium Preview</h4>
+                  <div className="grid gap-2 text-sm">
+                    <div className="flex justify-between">
+                      <span>Basic Premium:</span>
+                      <span>KES {basicPremium.toLocaleString()}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>Excess Protector:</span>
+                      <span>KES {formData.excess_protector.toLocaleString()}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>TL:</span>
+                      <span>KES {formData.tl.toLocaleString()}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>SD:</span>
+                      <span>KES {formData.sd.toLocaleString()}</span>
+                    </div>
+                    <Separator />
+                    <div className="flex justify-between font-semibold">
+                      <span>Total Premium:</span>
+                      <span>KES {totalPremium.toLocaleString()}</span>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           </CardContent>
         </Card>
@@ -384,12 +552,26 @@ export default function DebitNotePage() {
         <Separator className="mb-6" />
         <div className="text-center mb-4">
           <p className="text-sm text-muted-foreground">
-            Please review all information before generating the debit note
+            Please review all information before generating the debit note. Fields marked with * are required.
           </p>
         </div>
-        <Button onClick={handleGeneratePDF} size="lg" className="px-8">
-          <FileTextIcon className="mr-2 h-5 w-5" />
-          Generate and Download PDF
+        <Button
+          onClick={handleGeneratePDF}
+          size="lg"
+          className="px-8"
+          disabled={isGenerating || !formData.insurance_type || !formData.vehicle_covered}
+        >
+          {isGenerating ? (
+            <>
+              <div className="mr-2 h-4 w-4 animate-spin rounded-full border-2 border-background border-t-transparent" />
+              Generating PDF...
+            </>
+          ) : (
+            <>
+              <DownloadIcon className="mr-2 h-5 w-5" />
+              Generate and Download PDF
+            </>
+          )}
         </Button>
       </div>
     </div>

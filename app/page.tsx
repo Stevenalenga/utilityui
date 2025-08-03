@@ -31,6 +31,7 @@ interface FormData {
   color: string
   period_of_insurance: string
   terms_of_payment: string
+  insurer?: string
   generated_by?: string
 }
 
@@ -56,6 +57,7 @@ export default function DebitNotePage() {
     color: "",
     period_of_insurance: "",
     terms_of_payment: "",
+    insurer: "",
     generated_by: "",
   })
 
@@ -104,6 +106,7 @@ export default function DebitNotePage() {
         color: formData.color,
         period_of_insurance: formData.period_of_insurance,
         terms_of_payment: formData.terms_of_payment,
+        ...(formData.insurer && { insurer: formData.insurer }),
         ...(formData.generated_by && { generated_by: formData.generated_by }),
       }
 
@@ -274,6 +277,17 @@ export default function DebitNotePage() {
                   onChange={handleChange}
                   placeholder="e.g. Annual, Quarterly, Monthly, Cash"
                   required
+                />
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="insurer">Insurer (Optional)</Label>
+                <Input
+                  id="insurer"
+                  name="insurer"
+                  type="text"
+                  value={formData.insurer ?? ""}
+                  onChange={handleChange}
+                  placeholder="e.g. Jubilee, Britam, APA"
                 />
               </div>
             </div>
